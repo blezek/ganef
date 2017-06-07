@@ -82,15 +82,15 @@ func doQuery(q string) ([]rowmap, error) {
 					m[colName] = *(v)
 				} else {
 					vv, err = v.Value()
-					m[colName]= vv
+					m[colName] = vv
 				}
 			case *sql.NullFloat64:
-				v:= columnPointers[i].(*sql.NullFloat64)
+				v := columnPointers[i].(*sql.NullFloat64)
 				if indicateNull {
 					m[colName] = *(v)
 				} else {
 					vv, err = v.Value()
-					m[colName]= vv
+					m[colName] = vv
 				}
 			case *sql.NullInt64:
 				v := columnPointers[i].(*sql.NullInt64)
@@ -98,7 +98,7 @@ func doQuery(q string) ([]rowmap, error) {
 					m[colName] = *(v)
 				} else {
 					vv, err = v.Value()
-					m[colName]= vv
+					m[colName] = vv
 				}
 			}
 			// t := types[i].DatabaseTypeName()
