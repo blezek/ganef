@@ -26,7 +26,7 @@ unzip chinook.zip
 
 Note, the SQLite driver returns the column names in the *actual case* used to create the table, not what from the query string.
 
-````
+```
 # Create a template
 cat <<EOF > template.txt
 All tracks
