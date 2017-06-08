@@ -9,7 +9,7 @@ ganef is a simple program to query [sqlite](https://www.sqlite.org/) databases u
 Go 1.8 or higher required.
 
 ``` bash
-go get github.com/blezek/gonof
+go get github.com/blezek/ganef
 ```
 
 # Usage

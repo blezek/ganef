@@ -5,9 +5,10 @@ import (
 	"database/sql/driver"
 	"flag"
 	"fmt"
-	"io"
+	"io/ioutil"
 	"log"
 	"os"
+	"reflect"
 	"strings"
 	"text/template"
 	"time"
@@ -15,16 +16,21 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-var usage string = `usage: gonof [options] <sqlitedb> <template> <output>
+var usage string = `usage: gonof [options] <sqlitedb> [template] [output]
+
+read a template from <template> (or standard in), write the executed template to <output> (or standard out)
 
 options:
   -h help
+  -d debug
+  -v key=value   set variable in the template
   -n use nullable strings
 `
 
 var db *sql.DB
 var indicateNull bool = false
 var variables Variables = make(Variables)
+var debug bool = false
 
 type rowmap map[string]interface{}
 
@@ -52,7 +58,9 @@ func doQuery(q string) ([]rowmap, error) {
 		// and a second slice to contain pointers to each item in the columns slice.
 		columnPointers := make([]interface{}, len(cols))
 		for i, _ := range columnPointers {
-			// log.Printf("Looking at %s - type is %v", cols[i], typeNames[i])
+			if debug {
+				log.Printf("Looking at %s - type is %v", cols[i], typeNames[i])
+			}
 			t := typeNames[i]
 			if strings.Contains(t, "text") || strings.Contains(t, "varchar") || strings.Contains(t, "char") || strings.Contains(t, "date") {
 				columnPointers[i] = new(sql.NullString)
@@ -77,6 +85,9 @@ func doQuery(q string) ([]rowmap, error) {
 		for i, colName := range cols {
 			var err error
 			var vv driver.Value
+			if debug {
+				log.Printf("Parsing %v of type %v", colName, reflect.TypeOf(columnPointers[i]).String())
+			}
 			switch columnPointers[i].(type) {
 			case *sql.NullString:
 				v := columnPointers[i].(*sql.NullString)
@@ -102,6 +113,8 @@ func doQuery(q string) ([]rowmap, error) {
 					vv, err = v.Value()
 					m[colName] = vv
 				}
+			case *interface{}:
+				m[colName] = *(columnPointers[i].(*interface{}))
 			}
 			// t := types[i].DatabaseTypeName()
 			// if t == "text" {
@@ -126,6 +139,7 @@ func main() {
 
 	help := false
 	flag.BoolVar(&help, "h", false, "get help for the application")
+	flag.BoolVar(&debug, "d", false, "print debugging info")
 	flag.BoolVar(&indicateNull, "n", false, "return indicators of null to template (eg https://golang.org/pkg/database/sql/#NullString), default is to use zero values")
 	flag.Var(&variables, "v", "list of variables in 'key=value' form that are passed to the template")
 	flag.Parse()
@@ -135,17 +149,33 @@ func main() {
 		os.Exit(0)
 	}
 
-	if len(flag.Args()) < 3 {
-		log.Fatal(usage)
+	if flag.NArg() < 1 {
+		fmt.Println(usage)
+		os.Exit(1)
 	}
 
-	dbFilename := flag.Args()[0]
-	templateFilename := flag.Args()[1]
-	outputFilename := flag.Args()[2]
 	var err error
+	dbFilename := flag.Arg(0)
+	r := os.Stdin
+	w := os.Stdout
+
 	db, err = sql.Open("sqlite3", dbFilename)
 	if err != nil {
 		log.Fatalf("Failed to open sqlite DB %v, %v", dbFilename, err)
+	}
+
+	if flag.NArg() > 1 && flag.Arg(1) != "-" {
+		r, err = os.Open(flag.Arg(1))
+		if err != nil {
+			log.Fatalf("Failed to open template %v, %v", flag.Arg(1), err)
+		}
+	}
+
+	if flag.NArg() > 2 && flag.Arg(2) != "-" {
+		w, err = os.Create(flag.Arg(2))
+		if err != nil {
+			log.Fatalf("Failed to open output file %v, %v", flag.Arg(2), err)
+		}
 	}
 
 	// Add some helper functions
@@ -165,18 +195,16 @@ func main() {
 		// 	},
 	}
 
-	var t = template.New(templateFilename).Funcs(funcs)
-	t = template.Must(t.ParseFiles(templateFilename))
-	var out io.Writer
-	if outputFilename == "-" {
-		out = os.Stdout
-	} else {
-		out, err = os.Create(outputFilename)
-		if err != nil {
-			log.Fatalf("Failed to open %v, %v", outputFilename, err)
-		}
+	var t = template.New("sql").Funcs(funcs)
+	b, err := ioutil.ReadAll(r)
+	if err != nil {
+		log.Fatalf("Failed to read template %v", err.Error())
 	}
 
+	t, err = t.Parse(string(b))
+	if err != nil {
+		log.Fatalf("Failed to read parse template %v", err.Error())
+	}
 	data := map[string]interface{}{
 		"db": db,
 	}
@@ -184,7 +212,7 @@ func main() {
 		data[k] = v
 	}
 
-	err = t.Execute(out, data)
+	err = t.Execute(w, data)
 	if err != nil {
 		log.Fatalf("Failed to execute template %v", err)
 	}
