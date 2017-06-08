@@ -5,6 +5,7 @@ import (
 	"database/sql/driver"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"strings"
@@ -50,11 +51,11 @@ func doQuery(q string) ([]rowmap, error) {
 		// and a second slice to contain pointers to each item in the columns slice.
 		columnPointers := make([]interface{}, len(cols))
 		for i, _ := range columnPointers {
-			// log.Printf("Looking at %s - type is %v", cols[i], typeNames[i])
+			log.Printf("Looking at %s - type is %v", cols[i], typeNames[i])
 			t := typeNames[i]
 			if strings.Contains(t, "text") || strings.Contains(t, "varchar") || strings.Contains(t, "char") || strings.Contains(t, "date") {
 				columnPointers[i] = new(sql.NullString)
-			} else if strings.Contains(t, "double") || strings.Contains(t, "float") {
+			} else if strings.Contains(t, "double") || strings.Contains(t, "float") || strings.Contains(t, "numeric") {
 				columnPointers[i] = new(sql.NullFloat64)
 			} else if strings.Contains(t, "integer") {
 				columnPointers[i] = new(sql.NullInt64)
@@ -116,6 +117,7 @@ func doQuery(q string) ([]rowmap, error) {
 		// Outputs: map[columnName:value columnName2:value2 columnName3:value3 ...]
 		r = append(r, m)
 	}
+	// log.Printf("%v", r)
 	return r, err
 }
 
@@ -163,9 +165,14 @@ func main() {
 
 	var t = template.New(templateFilename).Funcs(funcs)
 	t = template.Must(t.ParseFiles(templateFilename))
-	out, err := os.Create(outputFilename)
-	if err != nil {
-		log.Fatalf("Failed to open %v, %v", outputFilename, err)
+	var out io.Writer
+	if outputFilename == "-" {
+		out = os.Stdout
+	} else {
+		out, err = os.Create(outputFilename)
+		if err != nil {
+			log.Fatalf("Failed to open %v, %v", outputFilename, err)
+		}
 	}
 
 	data := map[string]interface{}{
