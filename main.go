@@ -24,6 +24,7 @@ options:
 
 var db *sql.DB
 var indicateNull bool = false
+var variables Variables = make(Variables)
 
 type rowmap map[string]interface{}
 
@@ -51,7 +52,7 @@ func doQuery(q string) ([]rowmap, error) {
 		// and a second slice to contain pointers to each item in the columns slice.
 		columnPointers := make([]interface{}, len(cols))
 		for i, _ := range columnPointers {
-			log.Printf("Looking at %s - type is %v", cols[i], typeNames[i])
+			// log.Printf("Looking at %s - type is %v", cols[i], typeNames[i])
 			t := typeNames[i]
 			if strings.Contains(t, "text") || strings.Contains(t, "varchar") || strings.Contains(t, "char") || strings.Contains(t, "date") {
 				columnPointers[i] = new(sql.NullString)
@@ -126,6 +127,7 @@ func main() {
 	help := false
 	flag.BoolVar(&help, "h", false, "get help for the application")
 	flag.BoolVar(&indicateNull, "n", false, "return indicators of null to template (eg https://golang.org/pkg/database/sql/#NullString), default is to use zero values")
+	flag.Var(&variables, "v", "list of variables in 'key=value' form that are passed to the template")
 	flag.Parse()
 
 	if help {
@@ -178,6 +180,10 @@ func main() {
 	data := map[string]interface{}{
 		"db": db,
 	}
+	for k, v := range variables {
+		data[k] = v
+	}
+
 	err = t.Execute(out, data)
 	if err != nil {
 		log.Fatalf("Failed to execute template %v", err)
